@@ -45,7 +45,7 @@
 
     leds {
         compatible = "gpio-leds";
-      
+    
         /* LED 1 接在 P0.02, 高电平点亮 */
         my_led_1: led_1 {
             gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>;
@@ -61,35 +61,71 @@
 };
 ```
 
-### 4.2 修改 C 代码 (main.c)
+### 4.2  C 代码 (main.c)
 
-利用 Zephyr 的设备树 API 控制两个 LED 交替闪烁。
+为了体现 Zephyr RTOS 的多任务特性，我们不再使用裸机的 `while(1)` 循环，而是创建两个独立的线程来分别控制两个 LED。这演示了操作系统如何并发处理任务。
+
+* **RTOS 知识点**: `K_THREAD_DEFINE` (静态线程创建), `k_msleep` (阻塞延时)。
 
 ```c
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/logging/log.h>
 
-/* 从设备树获取硬件信息，无需在代码里写死 "2" 或 "3" */
+LOG_MODULE_REGISTER(day1_app, LOG_LEVEL_INF);
+
+/* 硬件定义 */
 static const struct gpio_dt_spec led1 = GPIO_DT_SPEC_GET(DT_ALIAS(led0), gpios);
 static const struct gpio_dt_spec led2 = GPIO_DT_SPEC_GET(DT_ALIAS(led1), gpios);
 
-int main(void)
-{
-    if (!gpio_is_ready_dt(&led1) || !gpio_is_ready_dt(&led2)) {
-        return 0;
-    }
+/* 线程参数配置 */
+#define STACK_SIZE 512
+#define THREAD_PRIORITY 7
 
+/* 任务 A: 快速闪烁 (500ms) */
+void led1_thread_entry(void *p1, void *p2, void *p3)
+{
+    if (!gpio_is_ready_dt(&led1)) return;
     gpio_pin_configure_dt(&led1, GPIO_OUTPUT_ACTIVE);
-    gpio_pin_configure_dt(&led2, GPIO_OUTPUT_INACTIVE);
 
     while (1) {
         gpio_pin_toggle_dt(&led1);
-        gpio_pin_toggle_dt(&led2);
-        k_msleep(500); // Zephyr 标准延时 API
+        LOG_INF("Task A executing...");
+        k_msleep(500); // 让出 CPU 权限
     }
+}
+
+/* 任务 B: 慢速闪烁 (1000ms) */
+void led2_thread_entry(void *p1, void *p2, void *p3)
+{
+    if (!gpio_is_ready_dt(&led2)) return;
+    gpio_pin_configure_dt(&led2, GPIO_OUTPUT_INACTIVE);
+
+    while (1) {
+        gpio_pin_toggle_dt(&led2);
+        LOG_INF("Task B executing...");
+        k_msleep(1000); // 让出 CPU 权限
+    }
+}
+
+/* 静态创建并启动线程 */
+K_THREAD_DEFINE(led1_id, STACK_SIZE, led1_thread_entry, NULL, NULL, NULL, THREAD_PRIORITY, 0, 0);
+K_THREAD_DEFINE(led2_id, STACK_SIZE, led2_thread_entry, NULL, NULL, NULL, THREAD_PRIORITY, 0, 0);
+
+int main(void)
+{
+    LOG_INF("System Start - Main thread will exit now.");
     return 0;
 }
 ```
+
+---
+
+### 💡 为什么要这么写？(教程讲解要点)
+
+1. **解耦**: 控制 LED1 的代码和控制 LED2 的代码完全独立，互不干扰。如果以后要加第三个任务（比如按键扫描），只需要加一个线程，不需要去改 `while` 循环里的逻辑。
+2. **调度**: 虽然看起来两个 `while(1)` 都在跑，但实际上是 `k_msleep` 把线程放入了“等待队列”，OS 调度器会把 CPU 时间片分配给另一个需要运行的线程。
+3. **Zephyr 特性**: `K_THREAD_DEFINE` 是编译时静态分配内存，这在资源受限的嵌入式设备上比 `malloc` 动态分配更安全、更稳定。
 
 ## 5. 编译与避坑指南 (Troubleshooting)
 
