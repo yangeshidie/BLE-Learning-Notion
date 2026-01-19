@@ -1,0 +1,22 @@
+/ {
+    aliases {
+        led0 = &my_led_1;
+        led1 = &my_led_2;
+    };
+
+    leds {
+        compatible = "gpio-leds";
+        
+        /* 修改为 P0.02 */
+        my_led_1: led_1 {
+            gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>; /* 假设是高电平亮 */
+            label = "LED 1 on P0.02";
+        };
+
+        /* 修改为 P0.03 */
+        my_led_2: led_2 {
+            gpios = <&gpio0 3 GPIO_ACTIVE_HIGH>; /* 假设是高电平亮 */
+            label = "LED 2 on P0.03";
+        };
+    };
+};
