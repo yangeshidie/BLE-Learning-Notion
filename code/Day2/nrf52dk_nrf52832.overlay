@@ -1,0 +1,32 @@
+/* app.overlay */
+
+/ {
+    /* 1. 覆盖别名 (Aliases)
+     * 将 led0 别名指向 null，或者直接删除，
+     * 这样如果代码里误用了 led0，编译阶段就会报错提示，而不是运行时崩溃。
+     */
+    aliases {
+        /delete-property/ led0;
+        /delete-property/ sw0;
+    };
+};
+
+/* 2. 禁用 UART0
+ * 官方 DK 默认开启 UART0 用于打印日志 (P0.06/P0.08)。
+ * 核心板如果没有接 USB 转 TTL 模块，建议禁用，
+ * 这样可以释放这两个引脚作为普通 GPIO 使用，并强迫日志走 RTT。
+ */
+&uart0 {
+    status = "disabled";
+};
+
+/* 3. 禁用 I2C/SPI (可选)
+ * 如果你的核心板引脚很紧张，可以把默认开启的通讯接口也关掉
+ */
+&i2c0 {
+    status = "disabled";
+};
+
+&spi0 {
+    status = "disabled";
+};
