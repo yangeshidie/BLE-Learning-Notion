@@ -139,7 +139,8 @@ static const struct bt_data ad[] = {
   // 使用 BT_LE_ADV_CONN，仅表示“可连接”，不自动添加名字
   err = bt_le_adv_start(BT_LE_ADV_CONN, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
   ```
-
+RTT看到这样的输出即可
+![1768965443749](image/README/1768965443749.png)
 ---
 
 ## 💣 第三部分：
@@ -209,7 +210,8 @@ static const struct bt_data ad[] = {
 * **Type**: `0xFF` (Manufacturer Specific Data)
 * **Company ID**: `FFFF`
 * **Data**: `41 43 45` (ACE)
-![1768965078922](image/README/1768965078922.png)
+  ![1768965078922](image/README/1768965078922.png)
+
 ---
 
 ## 📝 总结
@@ -220,4 +222,4 @@ Day 2 的教训比代码更有价值：
 2. **物理连接是基础**：软件再对，线松了也是白搭。
 3. **工程化思维**：遇到冲突（如 API 参数错误），回归文档查找宏定义的含义。
 
-**Next Step**: Day 3 - Connection & GATT Services.
+**Next Step**: Day 3 - **连接参数与状态机**.
