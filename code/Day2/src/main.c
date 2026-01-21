@@ -64,7 +64,7 @@ int main(void)
      *    - 使用代码中定义的名称
      *    - 默认广播间隔 (约 100ms)
      */
-    err = bt_le_adv_start(BT_LE_ADV_CONN_NAME, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
+    err = bt_le_adv_start(BT_LE_ADV_CONN, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
     
     // 如果你想手动控制参数（例如省电），可以用 struct bt_le_adv_param
     // err = bt_le_adv_start(BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONNECTABLE, 
