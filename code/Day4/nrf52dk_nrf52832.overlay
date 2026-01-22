@@ -1,0 +1,38 @@
+/*
+ * 这是一个设备树 Overlay 文件
+ * 用于覆盖开发板默认的硬件定义
+ */
+
+/ {
+    /* 定义我们自己的 LED 节点 */
+    my_leds {
+        compatible = "gpio-leds";
+        
+        /* 
+         * LED 1 (对应 Day 1 的 P0.02)
+         * &gpio0: 指的是 nRF52 的 Port 0
+         * 2: 指的是 Pin 2
+         * GPIO_ACTIVE_HIGH: 指的是高电平点亮 (1=亮, 0=灭)
+         */
+        led_custom_1: led_1 {
+            gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>;
+            label = "Status LED 1";
+        };
+
+        /* LED 2 (对应 Day 1 的 P0.03) */
+        led_custom_2: led_2 {
+            gpios = <&gpio0 3 GPIO_ACTIVE_HIGH>;
+            label = "Status LED 2";
+        };
+    };
+
+    /* 
+     * 修改别名 (Aliases)
+     * 这样我们在 C 代码中调用 "led0" 时，
+     * 实际上操作的是上面的 "led_custom_1" (P0.02)
+     */
+    aliases {
+        led0 = &led_custom_1; /* 系统默认的 led0 现在指向 P0.02 */
+        led1 = &led_custom_2; /* 系统默认的 led1 现在指向 P0.03 */
+    };
+};
