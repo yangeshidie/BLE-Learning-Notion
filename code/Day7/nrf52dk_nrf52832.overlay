@@ -1,0 +1,64 @@
+/ {
+    /* 定义 LED (保持不变) */
+    my_leds {
+        compatible = "gpio-leds";
+        led_custom_1: led_1 {
+            gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>;
+            label = "Status LED 1";
+        };
+        led_custom_2: led_2 {
+            gpios = <&gpio0 3 GPIO_ACTIVE_HIGH>;
+            label = "Status LED 2";
+        };
+    };
+
+    /* Day 5 新增: 定义按键 */
+    buttons {
+        compatible = "gpio-keys";
+        
+        /* 
+         * Button 0 (P0.04)
+         * GPIO_ACTIVE_HIGH: 按下为高电平
+         * GPIO_PULL_DOWN:   关键！松开时内部拉低，防止悬空
+         */
+        button_custom: button_0 {
+            gpios = <&gpio0 4 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>;
+            label = "User Button";
+        };
+    };
+
+    /* 修改别名 */
+    aliases {
+        led0 = &led_custom_1;
+        led1 = &led_custom_2;
+        sw0  = &button_custom; /* 将系统标准别名 sw0 映射到我们的自定义按键 */
+    };
+    
+};
+/* 强制配置 uart0 的引脚，确保与你的接线一致 */
+&uart0 {
+    compatible = "nordic,nrf-uarte";
+    status = "okay";
+    current-speed = <230400>;
+    pinctrl-0 = <&uart0_default>;
+    pinctrl-1 = <&uart0_sleep>;
+    pinctrl-names = "default", "sleep";
+};
+
+/* 定义引脚映射: RX=P0.08, TX=P0.06 */
+&pinctrl {
+    uart0_default: uart0_default {
+        group1 {
+            psels = <NRF_PSEL(UART_TX, 0, 6)>,
+                    <NRF_PSEL(UART_RX, 0, 8)>;
+        };
+    };
+
+    uart0_sleep: uart0_sleep {
+        group1 {
+            psels = <NRF_PSEL(UART_TX, 0, 6)>,
+                    <NRF_PSEL(UART_RX, 0, 8)>;
+            low-power-enable;
+        };
+    };
+};
