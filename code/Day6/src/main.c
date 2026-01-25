@@ -18,7 +18,7 @@
 
 #include "nus.h"
 
-LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 
 /* ----------------配置部分---------------- */
 #define UART_BUF_SIZE     1024   // UART 接收环形缓冲区大小
@@ -31,7 +31,8 @@ static const struct gpio_dt_spec led_conn = GPIO_DT_SPEC_GET(DT_ALIAS(led0), gpi
 static const struct gpio_dt_spec led_act  = GPIO_DT_SPEC_GET(DT_ALIAS(led1), gpios);
 
 /* 获取默认 Console UART 设备 (通常是 uart0) */
-static const struct device *uart_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
+/* 直接获取设备树中的 uart0 节点 */
+static const struct device *uart_dev = DEVICE_DT_GET(DT_NODELABEL(uart0));
 
 /* ----------------全局变量---------------- */
 /* 定义环形缓冲区 */
@@ -47,22 +48,6 @@ static uint16_t current_mtu = 23; // 默认 MTU，连接后会更新
 /* ----------------函数声明---------------- */
 static void uart_cb(const struct device *dev, void *user_data);
 static void ble_tx_work_handler(struct k_work *work);
-/* 定义 MTU 交换参数和回调 */
-static struct bt_gatt_exchange_params mtu_exchange_params = {
-    .func = NULL,  // MTU交换完成后的回调
-};
-
-/* MTU 更新回调 */
-static void mtu_exchange_cb(struct bt_conn *conn, uint8_t err,
-                            struct bt_gatt_exchange_params *params)
-{
-    if (!err) {
-        LOG_INF("MTU exchange completed successfully");
-    } else {
-        LOG_ERR("MTU exchange failed (err %d)", err);
-    }
-}
-
 /* 连接参数更新回调 */
 static void le_param_updated(struct bt_conn *conn, uint16_t interval,
                               uint16_t latency, uint16_t timeout)
@@ -82,9 +67,13 @@ static int uart_init(void)
         return -1;
     }
 
+    LOG_INF("UART device: %s", uart_dev->name);
+
     /* 配置中断回调 */
     uart_irq_callback_user_data_set(uart_dev, uart_cb, NULL);
     uart_irq_rx_enable(uart_dev);
+
+    LOG_INF("UART initialized and RX interrupt enabled");
 
     return 0;
 }
@@ -102,6 +91,8 @@ static void uart_cb(const struct device *dev, void *user_data)
         recv_len = uart_fifo_read(dev, recv_buf, sizeof(recv_buf));
         
         if (recv_len > 0) {
+            LOG_DBG("UART RX: %d bytes", recv_len);
+            
             /* 
              * 关键点：将数据放入 RingBuffer 
              * RingBuffer 是 ISR 和 WorkQueue 之间的桥梁
@@ -110,12 +101,12 @@ static void uart_cb(const struct device *dev, void *user_data)
             
             if (written < recv_len) {
                 LOG_WRN("RingBuffer Full! Dropped %d bytes", recv_len - written);
-                // 实际工程中这里可能需要更严重的错误处理
             }
 
             /* 触发 System Work Queue 进行 BLE 发送处理 */
             /* 使用 k_work_schedule 如果是 delayable work */
-            k_work_schedule(&ble_tx_work, K_NO_WAIT);
+
+            k_work_schedule(&ble_tx_work, K_USEC(500)); 
             
             /* 闪烁 LED 表示有 Activity */
             gpio_pin_toggle_dt(&led_act);
@@ -157,6 +148,8 @@ static void ble_tx_work_handler(struct k_work *work)
             break; 
         }
 
+        LOG_DBG("BLE TX: sending %d bytes", len);
+
         /* 3. 尝试通过 BLE 发送 */
         err = my_nus_send(current_conn, data_ptr, len);
 
@@ -180,6 +173,7 @@ static void ble_tx_work_handler(struct k_work *work)
              * 发送成功：
              * 确认消费掉已发送的 len 长度
              */
+            LOG_DBG("BLE TX: sent %d bytes successfully", len);
             ring_buf_get_finish(&uart_ring_buf, len);
         }
     }
@@ -245,6 +239,10 @@ static const struct bt_data ad[] = {
     BT_DATA_BYTES(BT_DATA_UUID128_ALL, MY_NUS_UUID_SERVICE_VAL),
 };
 
+static const struct bt_data sd[] = {
+    BT_DATA(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME, sizeof(CONFIG_BT_DEVICE_NAME) - 1),
+};
+
 int main(void)
 {
     int err;
@@ -277,7 +275,7 @@ int main(void)
     LOG_INF("Bluetooth initialized, starting advertising...");
 
     /* 3. 开始广播 */
-    err = bt_le_adv_start(BT_LE_ADV_CONN, ad, ARRAY_SIZE(ad), NULL, 0);
+    err = bt_le_adv_start(BT_LE_ADV_CONN, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
     if (err) {
         LOG_ERR("Advertising failed to start (err %d)", err);
         return 0;

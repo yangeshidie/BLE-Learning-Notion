@@ -10,7 +10,7 @@
 
 #include "nus.h"
 
-LOG_MODULE_REGISTER(my_nus, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(my_nus, LOG_LEVEL_DBG);
 
 static struct my_nus_cb nus_cb;
 
@@ -70,6 +70,16 @@ int my_nus_init(struct my_nus_cb *callbacks)
 
 int my_nus_send(struct bt_conn *conn, const uint8_t *data, uint16_t len)
 {
+    int err;
+    
+    LOG_DBG("my_nus_send: conn=%p, len=%d", (void *)conn, len);
+    
     /* 使用 bt_gatt_notify_uuid 发送数据 */
-    return bt_gatt_notify_uuid(conn, BT_UUID_MY_NUS_TX, NULL, data, len);
+    err = bt_gatt_notify_uuid(conn, BT_UUID_MY_NUS_TX, NULL, data, len);
+    
+    if (err) {
+        LOG_ERR("bt_gatt_notify_uuid failed: %d", err);
+    }
+    
+    return err;
 }
