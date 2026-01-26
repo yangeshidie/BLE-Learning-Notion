@@ -59,13 +59,13 @@ BT_GATT_SERVICE_DEFINE(my_service,
     // (2) 特征值定义
     // 参数1: 特征值的 UUID
     // 参数2: 属性 (Properties) - 告诉手机这个特征支持 Read 和 Write
-    // 参数3: 权限 (Permissions) - 告诉协议栈，读写是否需要加密/认证 (这里设为 Open，即无需加密)
+    // 参数3: 权限 (Permissions) - 告诉协议栈，读写是否需要加密/认证 (这里设为加密)
     // 参数4: Read 回调函数 - 使用系统默认的 bt_gatt_attr_read，它会直接读取 user_data
     // 参数5: Write 回调函数 - 使用我们自定义的 on_write
     // 参数6: user_data - 绑定的数据缓冲区
     BT_GATT_CHARACTERISTIC(MY_CHAR_UUID,
                            BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
-                           BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
+                           BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT,
                            on_read, on_write, my_value),
 );
 
