@@ -1,0 +1,26 @@
+/* .overlay */
+/ {
+    my_leds {
+        compatible = "gpio-leds";
+        /* V1 用红灯 (P0.02) */
+        led_custom_1: led_1 {
+            gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>;
+            label = "Status LED 1";
+        };
+        /* V2 用绿灯 (P0.03) */
+        led_custom_2: led_2 {
+            gpios = <&gpio0 3 GPIO_ACTIVE_HIGH>;
+            label = "Status LED 2";
+        };
+    };
+
+    aliases {
+        led0 = &led_custom_1;
+        led1 = &led_custom_2;
+    };
+};
+
+/* 禁用 UART0 以节省功耗和空间，因为我们要用 RTT */
+&uart0 {
+    status = "disabled";
+};
