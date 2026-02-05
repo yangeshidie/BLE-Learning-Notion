@@ -1,0 +1,58 @@
+/ {
+    /* 
+     * 1. 定义 LED 
+     */
+    my_leds {
+        compatible = "gpio-leds";
+        led_custom_1: led_1 {
+            gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>;
+            label = "Status LED 1";
+        };
+        led_custom_2: led_2 {
+            gpios = <&gpio0 3 GPIO_ACTIVE_HIGH>;
+            label = "Status LED 2";
+        };
+    };
+
+    /* 
+     * 2. 定义按键 
+     */
+    buttons {
+        compatible = "gpio-keys";
+        button_custom: button_0 {
+            gpios = <&gpio0 4 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>;
+            label = "User Button";
+        };
+    };
+
+    /* 
+     * 3.  自定义 ADC 节点
+     * 用于在 C 代码中获取 ADC 设备引用和通道配置
+     */
+    zephyr,user {
+        /* 
+         * io-channels 语法: <&adc 通道号>
+         * nRF52832 映射关系:
+         * 3 -> AIN3 -> P0.05 引脚
+         * (因为 P0.02-P0.04 已被占用，所以顺延使用 P0.05)
+         */
+        io-channels = <&adc 3>;
+        io-channel-names = "BATTERY_POT";
+    };
+
+    /* 修改别名 */
+    aliases {
+        led0 = &led_custom_1;
+        led1 = &led_custom_2;
+        sw0  = &button_custom;
+    };
+};
+
+&adc {
+    status = "okay";
+    /* 
+     * nRF52832 特定配置:
+     * 如果需要在所有通道上使用特定时钟或分辨率，可在此配置。
+     * 但通常我们在 C 代码中通过 adc_sequence 配置。
+     */
+};
