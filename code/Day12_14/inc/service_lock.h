@@ -1,11 +1,12 @@
 #ifndef SERVICE_LOCK_H
 #define SERVICE_LOCK_H
 
-#include <stdint.h>
-#include <zephyr/bluetooth/gatt.h>
+#include <stdbool.h>
 
-int service_lock_init(void);
+/**
+ * @brief 更新锁的状态通知给手机
+ * @param is_unlocked true=开锁状态, false=关锁状态
+ */
+int service_lock_send_status(bool is_unlocked);
 
-int service_lock_send_status(uint8_t status);
-
-#endif
+#endif // SERVICE_LOCK_H

@@ -1,25 +1,20 @@
 #ifndef APP_LOCK_H
 #define APP_LOCK_H
 
-#include <stdbool.h>
-#include <stdint.h>
-
-typedef enum {
-    LOCK_STATE_LOCKED,
-    LOCK_STATE_UNLOCKED
-} lock_state_t;
-
-typedef enum {
-    LOCK_ACTION_UNLOCK,
-    LOCK_ACTION_LOCK
-} lock_action_t;
-
+/**
+ * @brief 初始化锁的硬件（GPIO, 中断, WorkQueue）
+ */
 int app_lock_init(void);
 
-void app_lock_execute_action(lock_action_t action);
+/**
+ * @brief 执行开锁动作
+ * 
+ * 逻辑：
+ * 1. 点亮电磁铁 LED
+ * 2. 更新 BLE 状态为 "Unlocked"
+ * 3. 启动 3秒 定时器
+ * 4. 定时结束后自动熄灭 LED 并更新状态为 "Locked"
+ */
+void app_lock_open(void);
 
-lock_state_t app_lock_get_state(void);
-
-void app_lock_trigger_fast_advertising(void);
-
-#endif
+#endif // APP_LOCK_H

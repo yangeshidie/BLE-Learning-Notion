@@ -1,149 +1,113 @@
-#include "app_battery.h"
-#include <zephyr/drivers/adc.h>
-#include <zephyr/drivers/gpio.h>
 #include <zephyr/kernel.h>
+#include <zephyr/drivers/adc.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/sys/util.h>
-#include <zephyr/bluetooth/services/bas.h>
+#include <zephyr/bluetooth/services/bas.h> // 标准电池服务接口
+
+#include "app_battery.h"
 
 LOG_MODULE_REGISTER(app_battery, LOG_LEVEL_INF);
 
-#define BATTERY_ADC_CHANNEL DT_IO_CHANNELS_LABEL_BY_IDX(DT_PATH(zephyr_user), 0)
-#define BATTERY_ADC_CHANNEL_ID DT_IO_CHANNELS_CHANNEL_BY_IDX(DT_PATH(zephyr_user), 0)
+/* ----------------配置参数---------------- */
+#define BATTERY_MEASURE_INTERVAL_MS 10000 // 每10秒检测一次 (测试用，实际产品可设为几分钟)
 
-#define ADC_RESOLUTION 10
-#define ADC_GAIN ADC_GAIN_1_6
-#define ADC_REFERENCE ADC_REF_VDD_1_4
-#define ADC_ACQUISITION_TIME ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 40)
+/* 
+ * 电池电压范围假设：
+ * 模拟最大值 3.0V = 100%
+ * 模拟最小值 2.0V = 0% 
+ * (根据你的电位器调节范围调整)
+ */
+#define BATTERY_VOLTAGE_MAX_MV  3000
+#define BATTERY_VOLTAGE_MIN_MV  2000
 
-#define BATTERY_VOLTAGE_MAX 4200
-#define BATTERY_VOLTAGE_MIN 3300
+/* ----------------硬件节点获取---------------- */
+// 获取我们在 app.overlay 中定义的 zephyr,user -> io-channels
+static const struct adc_dt_spec adc_channel = ADC_DT_SPEC_GET(DT_PATH(zephyr_user));
 
-static const struct device *adc_dev = DEVICE_DT_GET(DT_NODELABEL(adc));
-static const struct adc_channel_cfg channel_cfg = {
-    .gain = ADC_GAIN,
-    .reference = ADC_REFERENCE,
-    .acquisition_time = ADC_ACQUISITION_TIME,
-    .channel_id = BATTERY_ADC_CHANNEL_ID,
-    .differential = 0,
-};
+/* ----------------变量定义---------------- */
+static struct k_work_delayable battery_work;
+static int16_t adc_buffer[1]; // 存放采样结果
 
-static int16_t m_sample_buffer[1];
-static uint8_t battery_level = 100;
+/* ----------------ADC 采样与转换逻辑---------------- */
 
-static struct k_timer battery_timer;
-
-static void battery_timer_handler(struct k_timer *timer_id)
-{
-    app_battery_update();
-}
-
-K_TIMER_DEFINE(battery_timer, battery_timer_handler, NULL);
-
-static int battery_sample(void)
+static void battery_sample_handler(struct k_work *work)
 {
     int err;
+    int32_t val_mv;
+    uint8_t battery_level;
+
+    // 1. 启动采样
     struct adc_sequence sequence = {
-        .buffer = m_sample_buffer,
-        .buffer_size = sizeof(m_sample_buffer),
-        .resolution = ADC_RESOLUTION,
+        .buffer = adc_buffer,
+        .buffer_size = sizeof(adc_buffer),
+        // 分辨率通常 10-bit 或 12-bit，这里由 DT 配置决定，默认通常是 12
     };
+    
+    // 必须手动把 DT 中的参数填入 sequence
+    adc_sequence_init_dt(&adc_channel, &sequence);
 
-    if (!device_is_ready(adc_dev)) {
-        LOG_ERR("ADC device not ready");
-        return -ENODEV;
-    }
-
-    err = adc_channel_setup_dt(ADC_DT_SPEC_GET(DT_IO_CHANNELS_CTLR_BY_IDX(DT_PATH(zephyr_user), 0)));
+    err = adc_read(adc_channel.dev, &sequence);
     if (err) {
-        LOG_ERR("Failed to setup ADC channel (err %d)", err);
-        return err;
+        LOG_ERR("ADC read failed (err %d)", err);
+        goto reschedule;
     }
 
-    (void)adc_sequence_init_dt(ADC_DT_SPEC_GET(DT_IO_CHANNELS_CTLR_BY_IDX(DT_PATH(zephyr_user), 0)),
-                                &sequence);
-
-    err = adc_read(adc_dev, &sequence);
+    // 2. 转换为毫伏 (mV)
+    val_mv = adc_buffer[0];
+    err = adc_raw_to_millivolts_dt(&adc_channel, &val_mv);
     if (err) {
-        LOG_ERR("Failed to read ADC (err %d)", err);
-        return err;
+        LOG_ERR("ADC convert failed (err %d)", err);
+        goto reschedule;
     }
 
-    return 0;
-}
+    LOG_INF("ADC Voltage: %d mV", val_mv);
 
-static int32_t battery_voltage_calc(int32_t raw_value)
-{
-    int32_t vref_mv = 3600;
-    int32_t voltage_mv;
-
-    voltage_mv = raw_value * vref_mv / (1 << ADC_RESOLUTION);
-    voltage_mv = voltage_mv * 6;
-
-    return voltage_mv;
-}
-
-static uint8_t battery_level_calc(int32_t voltage_mv)
-{
-    uint8_t level;
-
-    if (voltage_mv >= BATTERY_VOLTAGE_MAX) {
-        level = 100;
-    } else if (voltage_mv <= BATTERY_VOLTAGE_MIN) {
-        level = 0;
+    // 3. 计算百分比 (简单的线性映射)
+    if (val_mv >= BATTERY_VOLTAGE_MAX_MV) {
+        battery_level = 100;
+    } else if (val_mv <= BATTERY_VOLTAGE_MIN_MV) {
+        battery_level = 0;
     } else {
-        level = (voltage_mv - BATTERY_VOLTAGE_MIN) * 100 /
-                (BATTERY_VOLTAGE_MAX - BATTERY_VOLTAGE_MIN);
+        battery_level = (uint8_t)((val_mv - BATTERY_VOLTAGE_MIN_MV) * 100 / 
+                                  (BATTERY_VOLTAGE_MAX_MV - BATTERY_VOLTAGE_MIN_MV));
     }
 
-    return level;
+    // 4. 更新 BLE Battery Service
+    // bt_bas_set_battery_level 是 Zephyr 内置函数
+    // 它会自动检查是否连接、是否开启 Notify，然后推送数据
+    bt_bas_set_battery_level(battery_level);
+    LOG_INF("Reported Battery Level: %d%%", battery_level);
+
+reschedule:
+    // 5. 重新调度下一次采样
+    k_work_reschedule(&battery_work, K_MSEC(BATTERY_MEASURE_INTERVAL_MS));
 }
+
+/* ----------------初始化---------------- */
 
 int app_battery_init(void)
 {
     int err;
 
-    if (!device_is_ready(adc_dev)) {
-        LOG_ERR("ADC device not ready");
+    // 1. 检查设备是否就绪
+    if (!adc_is_ready_dt(&adc_channel)) {
+        LOG_ERR("ADC controller not ready");
         return -ENODEV;
     }
 
-    err = adc_channel_setup_dt(ADC_DT_SPEC_GET(DT_IO_CHANNELS_CTLR_BY_IDX(DT_PATH(zephyr_user), 0)));
+    // 2. 配置通道 (Channel Setup)
+    // 根据 overlay 中的配置应用到硬件
+    err = adc_channel_setup_dt(&adc_channel);
     if (err) {
-        LOG_ERR("Failed to setup ADC channel (err %d)", err);
+        LOG_ERR("ADC setup failed (err %d)", err);
         return err;
     }
 
-    LOG_INF("Battery module initialized");
+    // 3. 初始化定时任务
+    k_work_init_delayable(&battery_work, battery_sample_handler);
 
-    k_timer_start(&battery_timer, K_SECONDS(5), K_SECONDS(5));
+    // 4. 立即启动第一次采样
+    k_work_reschedule(&battery_work, K_NO_WAIT);
 
+    LOG_INF("Battery Monitor Initialized");
     return 0;
-}
-
-uint8_t app_battery_get_level(void)
-{
-    return battery_level;
-}
-
-void app_battery_update(void)
-{
-    int err;
-    int32_t voltage_mv;
-    uint8_t new_level;
-
-    err = battery_sample();
-    if (err) {
-        LOG_ERR("Failed to sample battery (err %d)", err);
-        return;
-    }
-
-    voltage_mv = battery_voltage_calc(m_sample_buffer[0]);
-    new_level = battery_level_calc(voltage_mv);
-
-    if (new_level != battery_level) {
-        battery_level = new_level;
-        LOG_INF("Battery level: %d%% (%d mV)", battery_level, voltage_mv);
-        bt_bas_set_battery_level(battery_level);
-    }
 }

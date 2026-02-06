@@ -47,12 +47,17 @@
         sw0  = &button_custom;
     };
 };
-
 &adc {
     status = "okay";
-    /* 
-     * nRF52832 特定配置:
-     * 如果需要在所有通道上使用特定时钟或分辨率，可在此配置。
-     * 但通常我们在 C 代码中通过 adc_sequence 配置。
-     */
+    #address-cells = <1>;
+    #size-cells = <0>;
+
+    channel@3 {
+        reg = <3>; // Channel 3 = AIN3 = P0.05
+        zephyr,gain = "ADC_GAIN_1_6"; // 1/6 增益
+        zephyr,reference = "ADC_REF_INTERNAL"; // 0.6V 内部参考
+        zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+        zephyr,input-positive = <NRF_SAADC_AIN3>;
+        zephyr,resolution = <12>;
+    };
 };

@@ -1,20 +1,25 @@
 #ifndef BLE_SETUP_H
 #define BLE_SETUP_H
 
-#include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/bluetooth/conn.h>
+#include <stdbool.h>
 
-typedef enum {
-    ADV_MODE_FAST,
-    ADV_MODE_SLOW
-} adv_mode_t;
-
+/**
+ * @brief 初始化蓝牙协议栈，配置回调，并启动初始广播
+ * @return 0 表示成功，负数表示错误码
+ */
 int ble_setup_init(void);
 
-int ble_setup_start_advertising(adv_mode_t mode);
+/**
+ * @brief 强制启动快速广播 (Fast Advertising)
+ * 
+ * 用于按键唤醒场景。如果当前已连接，此函数无效。
+ * 快速广播持续一段时间后会自动切换回慢速广播。
+ */
+void ble_setup_start_fast_adv(void);
 
-int ble_setup_stop_advertising(void);
+/**
+ * @brief 获取当前蓝牙连接状态
+ */
+bool ble_is_connected(void);
 
-void ble_setup_set_connection_led(bool connected);
-
-#endif
+#endif // BLE_SETUP_H
